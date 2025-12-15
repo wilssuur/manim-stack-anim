@@ -136,8 +136,7 @@ class StackDemo(Scene):
 
         stack, cells = make_stack()
 
-        cpp_src = """// вызывающий код
-add(x1, x2);
+        cpp_src = """add(x1, x2);
 
 int add(int a, int b)
 {
@@ -205,7 +204,7 @@ ret"""
             "ret": text_in_cell(cells, 4, "return address", scale=0.30),
             "old": text_in_cell(cells, 5, "EBP"),
             "c0c": text_in_cell(cells, 6, "0xC"),
-            "q0": text_in_cell(cells, 7, "?", MUT),
+            "c": text_in_cell(cells, 7, "?", MUT),
         }
 
         def highlight_line(line_group, color=ORANGE):
@@ -228,7 +227,7 @@ ret"""
         self.play(FadeIn(esp), FadeIn(ebp), run_time=0.4)
         self.wait(0.2)
 
-        h_cpp = highlight_line(cpp_lines[1])
+        h_cpp = highlight_line(cpp_lines[0])
         h_asm = highlight_line(asm_lines[0])
         self.play(FadeIn(h_cpp), FadeIn(h_asm), run_time=0.25)
         self.play(Flash(cells[4], color=YELLOW, flash_radius=0.24), run_time=0.30)
@@ -252,5 +251,16 @@ ret"""
         self.play(FadeIn(h_cpp2), FadeIn(h_asm4), run_time=0.2)
         self.play(Flash(cells[5], color=YELLOW, flash_radius=0.23), run_time=0.30)
         self.play(FadeOut(h_cpp2), FadeOut(h_asm4), run_time=0.2)
+
+        h_cpp3 = highlight_line(cpp_lines[5])
+        h_asm5 = highlight_line(asm_lines[7])
+        self.play(FadeIn(h_cpp3), FadeIn(h_asm5), run_time=0.2)
+        c_val = text_in_cell(cells, 7, "12", INK)
+        self.play(
+            Transform(labels["c"], c_val),
+            Flash(cells[7], color=YELLOW, flash_radius=0.22),
+            run_time=0.55,
+        )
+        self.play(FadeOut(h_cpp3), FadeOut(h_asm5), run_time=0.2)
 
         self.wait(0.8)
