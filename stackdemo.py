@@ -5,10 +5,10 @@ MONO = "Consolas"
 INK, MUT, GRID = BLACK, GREY_B, GREY_B
 
 CELL_W, CELL_H, ROWS = 2.6, 0.55, 8
-LEFT_WIDTH, RIGHT_WIDTH = 5.3, 5.6
-GAP_L, GAP_R = 1.6, 1.9
-CODE_SCALE = 0.32
-LINE_VSPACE = 0.10
+LEFT_WIDTH, RIGHT_WIDTH = 5.20, 5.70
+GAP_L, GAP_R = 1.70, 2.10
+CODE_SCALE = 0.30
+LINE_VSPACE = 0.14
 
 CPP_KW = r"\b(int|return|void|float|double|long|short|unsigned|signed|auto|const)\b"
 CPP_TYPES = r"\b(bool|char|size_t)\b"
@@ -22,24 +22,7 @@ MNEM_COLOR = "#7A3E9D"
 COMMENT_COLOR = "#888888"
 
 
-def make_stack(rows=ROWS, cell_w=CELL_W, cell_h=CELL_H):
-    h = rows * cell_h
-    outer = Rectangle(width=cell_w, height=h, stroke_color=INK, stroke_width=3.0)
-    cells = VGroup()
-    for i in range(rows):
-        r = Rectangle(width=cell_w, height=cell_h, stroke_color=GRID, stroke_width=2.0)
-        r.move_to(outer.get_top() + DOWN * (i + 0.5) * cell_h)
-        cells.add(r)
-    return VGroup(outer, cells), cells
-
-
-def text_in_cell(cells, idx, txt, color=INK, scale=0.33):
-    t = Text(txt, font=MONO, color=color).scale(scale)
-    t.move_to(cells[idx].get_center())
-    return t
-
-
-def color_tokens(line: str, is_cpp: bool):
+def color_tokens(line: str, is_cpp: bool) -> dict:
     t2c = {}
     if is_cpp:
         for m in re.finditer(CPP_KW, line):
@@ -98,7 +81,24 @@ def code_block_syntax(src: str, width=5.8, is_cpp=True):
     return group, line_groups
 
 
-def make_ptr(name: str, cell, side="right", length=0.55, color=INK):
+def make_stack(rows=ROWS, cell_w=CELL_W, cell_h=CELL_H):
+    h = rows * cell_h
+    outer = Rectangle(width=cell_w, height=h, stroke_color=INK, stroke_width=3.0)
+    cells = VGroup()
+    for i in range(rows):
+        r = Rectangle(width=cell_w, height=cell_h, stroke_color=GRID, stroke_width=2.0)
+        r.move_to(outer.get_top() + DOWN * (i + 0.5) * cell_h)
+        cells.add(r)
+    return VGroup(outer, cells), cells
+
+
+def text_in_cell(cells, idx, txt, color=INK, scale=0.33):
+    t = Text(txt, font=MONO, color=color).scale(scale)
+    t.move_to(cells[idx].get_center())
+    return t
+
+
+def make_ptr(name: str, cell, side="right", length=0.60, color=INK):
     if side == "right":
         end = cell.get_right()
         start = end + RIGHT * length
@@ -107,14 +107,13 @@ def make_ptr(name: str, cell, side="right", length=0.55, color=INK):
         end = cell.get_left()
         start = end + LEFT * length
         label_dir = LEFT
-
     arrow = Arrow(start, end, tip_length=0.16, stroke_width=3.0, color=color)
     label = Text(name, font=MONO, color=color).scale(0.34)
     label.next_to(arrow, label_dir, buff=0.10).align_to(arrow, DOWN)
     return VGroup(arrow, label)
 
 
-def move_ptr(ptr: VGroup, cell, side="right", length=0.55):
+def move_ptr(ptr: VGroup, cell, side="right", length=0.60):
     arrow, label = ptr[0], ptr[1]
     if side == "right":
         end = cell.get_right()
@@ -124,7 +123,6 @@ def move_ptr(ptr: VGroup, cell, side="right", length=0.55):
         end = cell.get_left()
         start = end + LEFT * length
         label_dir = LEFT
-
     return AnimationGroup(
         arrow.animate.put_start_and_end_on(start, end),
         label.animate.next_to(arrow, label_dir, buff=0.10).align_to(arrow, DOWN),
@@ -132,20 +130,26 @@ def move_ptr(ptr: VGroup, cell, side="right", length=0.55):
     )
 
 
-def highlight_line(line_group, color=ORANGE):
-    rect = SurroundingRectangle(line_group, color=color, buff=0.07)
-    rect.set_fill(color, 0.10).set_stroke(color, 2.0)
-    return rect
+def line_highlight(line_group, color=ORANGE, buff=0.07):
+    r = SurroundingRectangle(line_group, color=color, buff=buff)
+    r.set_fill(color, 0.10).set_stroke(color, 2.0)
+    return r
+
+
+def line_text(group: VGroup) -> str:
+    out = ""
+    for m in group:
+        if hasattr(m, "text"):
+            out += m.text
+    return out
 
 
 def find_line(lines, needle: str):
     target = needle.strip()
+    if not target:
+        return None
     for g in lines:
-        t = ""
-        for m in g:
-            if hasattr(m, "text"):
-                t += m.text
-        if target and target in t:
+        if target in line_text(g):
             return g
     return None
 
@@ -154,7 +158,7 @@ class StackDemo(Scene):
     def construct(self):
         self.camera.background_color = WHITE
 
-        title = Text("STACK DEMONSTRATION (x86, 32-бит)", font=MONO, weight=BOLD, color=INK).scale(0.75)
+        title = Text("STACK DEMONSTRATION (x86, 32-бит)", font=MONO, weight=BOLD, color=INK).scale(0.78)
         title.to_edge(UP, buff=0.35)
 
         stack, cells = make_stack()
@@ -172,10 +176,11 @@ int add(int a, int b)
         asm_src = """push    ebp
 mov     ebp, esp
 sub     esp, 0x10
-mov     eax, DWORD PTR [ebp+0xC]
-mov     edx, DWORD PTR [ebp+0x8]
-lea     eax, [edx + eax*1]
-mov     DWORD PTR [ebp-0x4], eax
+
+mov     eax, DWORD PTR [ebp+0xC]    ; b
+mov     edx, DWORD PTR [ebp+0x8]    ; a
+lea     eax, [edx + eax*1]          ; a+b
+mov     DWORD PTR [ebp-0x4], eax    ; c
 mov     eax, DWORD PTR [ebp-0x4]
 leave
 ret"""
@@ -187,7 +192,6 @@ ret"""
 
         high = Text("High memory (100)", font=MONO, color=INK).scale(0.34).next_to(stack, UP, buff=0.18)
         high.set_x(stack.get_x())
-
         hi_arrow = Arrow(
             start=stack.get_top() + RIGHT * 0.55 + UP * 0.16,
             end=stack.get_top() + RIGHT * 0.55,
@@ -215,112 +219,133 @@ ret"""
         p_lbl.move_to([left_band_x, cells[3].get_center()[1], 0])
         r_lbl.move_to([left_band_x, cells[4].get_center()[1], 0])
 
-        esp = make_ptr("ESP", cells[6], side="right", length=0.55)
-        ebp = make_ptr("EBP", cells[5], side="right", length=0.55)
-
         labels = {
             "q7": text_in_cell(cells, 0, "?", MUT),
             "q6": text_in_cell(cells, 1, "?", MUT),
-            "b": text_in_cell(cells, 2, "8"),
-            "a": text_in_cell(cells, 3, "4"),
+            "b": text_in_cell(cells, 2, "arg b"),
+            "a": text_in_cell(cells, 3, "arg a"),
             "ret": text_in_cell(cells, 4, "return address", scale=0.30),
-            "old": text_in_cell(cells, 5, "EBP"),
-            "c0c": text_in_cell(cells, 6, "0xC"),
-            "c": text_in_cell(cells, 7, "?", MUT),
+            "old": text_in_cell(cells, 5, "saved EBP", scale=0.30),
+            "pad": text_in_cell(cells, 6, "?", MUT),
+            "c": text_in_cell(cells, 7, "c = ?", MUT),
         }
+
+        esp = make_ptr("ESP", cells[4], side="right", length=0.60)
+        ebp = make_ptr("EBP", cells[1], side="right", length=0.60, color=GREY_C)
 
         eax_tag = Text("EAX = ?", font=MONO, color=INK).scale(0.34)
         eax_tag.next_to(asm_grp, RIGHT, buff=0.35).align_to(asm_grp, UP).shift(DOWN * 0.2)
 
-        self.play(FadeIn(title, shift=DOWN * 0.2), run_time=0.5)
+        self.play(FadeIn(title), run_time=0.5)
         self.play(FadeIn(cpp_grp), FadeIn(stack), FadeIn(asm_grp), run_time=0.7)
-        self.play(
-            FadeIn(high),
-            Create(hi_arrow),
-            FadeIn(low),
-            Create(brace),
-            FadeIn(bits),
-            FadeIn(note),
-            run_time=0.6,
-        )
+        self.play(FadeIn(high), Create(hi_arrow), FadeIn(low), Create(brace), FadeIn(bits), FadeIn(note), run_time=0.6)
         self.play(*[FadeIn(v) for v in labels.values()], FadeIn(p_lbl), FadeIn(r_lbl), run_time=0.7)
-        self.play(FadeIn(esp), FadeIn(ebp), FadeIn(eax_tag), run_time=0.5)
-        self.wait(0.2)
+        self.play(FadeIn(esp), FadeIn(ebp), FadeIn(eax_tag), run_time=0.45)
+        self.wait(0.15)
 
-        g_call = find_line(cpp_lines, "add(x1, x2);")
-        g_push = find_line(asm_lines, "push    ebp")
-        h1 = highlight_line(g_call) if g_call else None
-        h2 = highlight_line(g_push) if g_push else None
-        if h1 and h2:
-            self.play(FadeIn(h1), FadeIn(h2), run_time=0.25)
-        self.play(Flash(cells[4], color=YELLOW, flash_radius=0.24), run_time=0.30)
-        if h1 and h2:
-            self.play(FadeOut(h1), FadeOut(h2), run_time=0.2)
+        def sync_step(cpp_needles, asm_needles, action=None):
+            if isinstance(cpp_needles, str):
+                cpp_needles = [cpp_needles]
+            if isinstance(asm_needles, str):
+                asm_needles = [asm_needles]
 
-        g_mov_ebp = find_line(asm_lines, "mov     ebp, esp")
-        h = highlight_line(g_mov_ebp) if g_mov_ebp else None
-        if h:
-            self.play(FadeIn(h), run_time=0.2)
-        self.play(move_ptr(ebp, cells[6], side="right", length=0.55), run_time=0.6)
-        if h:
-            self.play(FadeOut(h), run_time=0.2)
+            cpp_rects = []
+            for n in cpp_needles:
+                g = find_line(cpp_lines, n)
+                if g:
+                    cpp_rects.append(line_highlight(g))
 
-        g_sub_esp = find_line(asm_lines, "sub     esp, 0x10")
-        h = highlight_line(g_sub_esp) if g_sub_esp else None
-        if h:
-            self.play(FadeIn(h), run_time=0.2)
-        target_idx = 2
-        self.play(move_ptr(esp, cells[target_idx], side="right", length=0.55), run_time=0.7)
-        for i in range(target_idx, 6):
-            self.play(Flash(cells[i], color=YELLOW, flash_radius=0.22), run_time=0.10)
-        if h:
-            self.play(FadeOut(h), run_time=0.2)
+            asm_rects = []
+            for n in asm_needles:
+                g = find_line(asm_lines, n)
+                if g:
+                    asm_rects.append(line_highlight(g))
 
-        g_cpp_sum = find_line(cpp_lines, "c = a + b;")
-        g_lea = find_line(asm_lines, "lea     eax")
-        h_cpp = highlight_line(g_cpp_sum) if g_cpp_sum else None
-        h_asm = highlight_line(g_lea) if g_lea else None
-        if h_cpp and h_asm:
-            self.play(FadeIn(h_cpp), FadeIn(h_asm), run_time=0.2)
-        eax_new = Text("EAX = 12", font=MONO, color=INK).scale(0.34).move_to(eax_tag.get_center())
-        self.play(Transform(eax_tag, eax_new), run_time=0.35)
-        if h_cpp and h_asm:
-            self.play(FadeOut(h_cpp), FadeOut(h_asm), run_time=0.2)
+            all_rects = VGroup(*cpp_rects, *asm_rects) if (cpp_rects or asm_rects) else None
+            if all_rects:
+                self.play(FadeIn(all_rects), run_time=0.2)
+            if action:
+                action()
+            if all_rects:
+                self.play(FadeOut(all_rects), run_time=0.2)
 
-        g_store_c = find_line(asm_lines, "mov     DWORD PTR [ebp-0x4], eax")
-        h = highlight_line(g_store_c) if g_store_c else None
-        if h:
-            self.play(FadeIn(h), run_time=0.2)
-        c_val = text_in_cell(cells, 7, "12", INK)
-        self.play(Transform(labels["c"], c_val), Flash(cells[7], color=YELLOW, flash_radius=0.22), run_time=0.55)
-        if h:
-            self.play(FadeOut(h), run_time=0.2)
+        sync_step(
+            "add(x1, x2);",
+            "push    ebp",
+            action=lambda: self.play(Flash(cells[4], color=YELLOW, flash_radius=0.25), run_time=0.30),
+        )
 
-        g_ret_cpp = find_line(cpp_lines, "return c;")
-        g_load_eax = find_line(asm_lines, "mov     eax, DWORD PTR [ebp-0x4]")
-        h_cpp = highlight_line(g_ret_cpp) if g_ret_cpp else None
-        h_asm = highlight_line(g_load_eax) if g_load_eax else None
-        if h_cpp and h_asm:
-            self.play(FadeIn(h_cpp), FadeIn(h_asm), run_time=0.2)
-        self.play(Flash(cells[7], color=YELLOW, flash_radius=0.20), run_time=0.25)
-        if h_cpp and h_asm:
-            self.play(FadeOut(h_cpp), FadeOut(h_asm), run_time=0.2)
+        def do_push_ebp():
+            self.play(move_ptr(esp, cells[5], side="right", length=0.60), run_time=0.45)
+            self.play(Flash(cells[5], color=YELLOW, flash_radius=0.22), run_time=0.22)
 
-        g_leave = find_line(asm_lines, "leave")
-        h = highlight_line(g_leave) if g_leave else None
-        if h:
-            self.play(FadeIn(h), run_time=0.2)
-        self.play(move_ptr(esp, cells[6], side="right", length=0.55), run_time=0.55)
-        self.play(move_ptr(ebp, cells[5], side="right", length=0.55), run_time=0.55)
-        if h:
-            self.play(FadeOut(h), run_time=0.2)
+        sync_step(
+            "int add(int a, int b)",
+            "push    ebp",
+            action=do_push_ebp,
+        )
 
-        g_ret = find_line(asm_lines, "ret")
-        h = highlight_line(g_ret) if g_ret else None
-        if h:
-            self.play(FadeIn(h), run_time=0.2)
-        self.play(Flash(cells[4], color=YELLOW, flash_radius=0.24), run_time=0.30)
-        if h:
-            self.play(FadeOut(h), run_time=0.2)
+        def do_mov_ebp():
+            self.play(move_ptr(ebp, cells[5], side="right", length=0.60), run_time=0.55)
+            ebp[0].set_color(INK)
+            ebp[1].set_color(INK)
 
-        self.wait(0.8)
+        sync_step(
+            "{",
+            "mov     ebp, esp",
+            action=do_mov_ebp,
+        )
+
+        def reserve_locals():
+            self.play(move_ptr(esp, cells[7], side="right", length=0.60), run_time=0.65)
+            self.play(Flash(cells[6], color=YELLOW, flash_radius=0.20), run_time=0.16)
+            self.play(Flash(cells[7], color=YELLOW, flash_radius=0.20), run_time=0.16)
+
+        sync_step(
+            "int c;",
+            "sub     esp, 0x10",
+            action=reserve_locals,
+        )
+
+        def do_calc():
+            eax_new = Text("EAX = 12", font=MONO, color=INK).scale(0.34).move_to(eax_tag.get_center())
+            self.play(Transform(eax_tag, eax_new), run_time=0.35)
+
+        sync_step(
+            "c = a + b;",
+            ["mov     eax, DWORD PTR [ebp+0xC]", "mov     edx, DWORD PTR [ebp+0x8]", "lea     eax, [edx + eax*1]"],
+            action=do_calc,
+        )
+
+        def do_store_c():
+            c_val = text_in_cell(cells, 7, "c = 12", INK)
+            self.play(Transform(labels["c"], c_val), Flash(cells[7], color=YELLOW, flash_radius=0.22), run_time=0.55)
+
+        sync_step(
+            "c = a + b;",
+            "mov     DWORD PTR [ebp-0x4], eax",
+            action=do_store_c,
+        )
+
+        sync_step(
+            "return c;",
+            "mov     eax, DWORD PTR [ebp-0x4]",
+            action=lambda: self.play(Flash(cells[7], color=YELLOW, flash_radius=0.20), run_time=0.25),
+        )
+
+        def do_leave_ret():
+            self.play(move_ptr(esp, cells[5], side="right", length=0.60), run_time=0.35)
+            self.play(move_ptr(esp, cells[4], side="right", length=0.60), run_time=0.35)
+            self.play(move_ptr(ebp, cells[1], side="right", length=0.60), run_time=0.35)
+            ebp[0].set_color(GREY_C)
+            ebp[1].set_color(GREY_C)
+            self.play(Flash(cells[4], color=YELLOW, flash_radius=0.22), run_time=0.22)
+            self.play(move_ptr(esp, cells[3], side="right", length=0.60), run_time=0.35)
+
+        sync_step(
+            "return c;",
+            ["leave", "ret"],
+            action=do_leave_ret,
+        )
+
+        self.wait(0.6)
