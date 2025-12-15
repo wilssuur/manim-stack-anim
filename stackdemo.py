@@ -16,6 +16,11 @@ ASM_MNEM = r"\b(push|pop|mov|lea|sub|add|leave|ret|retn|call)\b"
 ASM_REGS = r"\b(eax|ebx|ecx|edx|esi|edi|esp|ebp|rax|rbx|rcx|rdx|rsp|rbp)\b"
 HEX_DEC = r"(?<![\w])0x[0-9A-Fa-f]+|(?<![\w])\d+"
 
+C_KW_COLOR = "#0057B7"
+NUM_COLOR = "#A31515"
+MNEM_COLOR = "#7A3E9D"
+COMMENT_COLOR = "#888888"
+
 
 def make_stack(rows=ROWS, cell_w=CELL_W, cell_h=CELL_H):
     h = rows * cell_h
@@ -38,18 +43,18 @@ def color_tokens(line: str, is_cpp: bool):
     t2c = {}
     if is_cpp:
         for m in re.finditer(CPP_KW, line):
-            t2c[m.group(0)] = "#0057B7"
+            t2c[m.group(0)] = C_KW_COLOR
         for m in re.finditer(CPP_TYPES, line):
-            t2c[m.group(0)] = "#0057B7"
+            t2c[m.group(0)] = C_KW_COLOR
         for m in re.finditer(HEX_DEC, line):
-            t2c[m.group(0)] = "#A31515"
+            t2c[m.group(0)] = NUM_COLOR
     else:
         for m in re.finditer(ASM_MNEM, line):
-            t2c[m.group(0)] = "#7A3E9D"
+            t2c[m.group(0)] = MNEM_COLOR
         for m in re.finditer(ASM_REGS, line):
-            t2c[m.group(0)] = "#0057B7"
+            t2c[m.group(0)] = C_KW_COLOR
         for m in re.finditer(HEX_DEC, line):
-            t2c[m.group(0)] = "#A31515"
+            t2c[m.group(0)] = NUM_COLOR
     return t2c
 
 
@@ -74,7 +79,7 @@ def code_block_syntax(src: str, width=5.8, is_cpp=True):
         ).scale(CODE_SCALE)
 
         if comment_part:
-            cm = Text(comment_part, font=MONO, color="#888888").scale(CODE_SCALE)
+            cm = Text(comment_part, font=MONO, color=COMMENT_COLOR).scale(CODE_SCALE)
             row = VGroup(code_txt, cm).arrange(RIGHT, buff=0.10, aligned_edge=DOWN)
         else:
             row = VGroup(code_txt)
@@ -127,6 +132,24 @@ def move_ptr(ptr: VGroup, cell, side="right", length=0.55):
     )
 
 
+def highlight_line(line_group, color=ORANGE):
+    rect = SurroundingRectangle(line_group, color=color, buff=0.07)
+    rect.set_fill(color, 0.10).set_stroke(color, 2.0)
+    return rect
+
+
+def find_line(lines, needle: str):
+    target = needle.strip()
+    for g in lines:
+        t = ""
+        for m in g:
+            if hasattr(m, "text"):
+                t += m.text
+        if target and target in t:
+            return g
+    return None
+
+
 class StackDemo(Scene):
     def construct(self):
         self.camera.background_color = WHITE
@@ -149,11 +172,10 @@ int add(int a, int b)
         asm_src = """push    ebp
 mov     ebp, esp
 sub     esp, 0x10
-
-mov     eax, DWORD PTR [ebp+0xC]    ; b
-mov     edx, DWORD PTR [ebp+0x8]    ; a
-lea     eax, [edx + eax*1]          ; a+b
-mov     DWORD PTR [ebp-0x4], eax    ; c
+mov     eax, DWORD PTR [ebp+0xC]
+mov     edx, DWORD PTR [ebp+0x8]
+lea     eax, [edx + eax*1]
+mov     DWORD PTR [ebp-0x4], eax
 mov     eax, DWORD PTR [ebp-0x4]
 leave
 ret"""
@@ -207,10 +229,8 @@ ret"""
             "c": text_in_cell(cells, 7, "?", MUT),
         }
 
-        def highlight_line(line_group, color=ORANGE):
-            rect = SurroundingRectangle(line_group, color=color, buff=0.07)
-            rect.set_fill(color, 0.10).set_stroke(color, 2.0)
-            return rect
+        eax_tag = Text("EAX = ?", font=MONO, color=INK).scale(0.34)
+        eax_tag.next_to(asm_grp, RIGHT, buff=0.35).align_to(asm_grp, UP).shift(DOWN * 0.2)
 
         self.play(FadeIn(title, shift=DOWN * 0.2), run_time=0.5)
         self.play(FadeIn(cpp_grp), FadeIn(stack), FadeIn(asm_grp), run_time=0.7)
@@ -224,43 +244,83 @@ ret"""
             run_time=0.6,
         )
         self.play(*[FadeIn(v) for v in labels.values()], FadeIn(p_lbl), FadeIn(r_lbl), run_time=0.7)
-        self.play(FadeIn(esp), FadeIn(ebp), run_time=0.4)
+        self.play(FadeIn(esp), FadeIn(ebp), FadeIn(eax_tag), run_time=0.5)
         self.wait(0.2)
 
-        h_cpp = highlight_line(cpp_lines[0])
-        h_asm = highlight_line(asm_lines[0])
-        self.play(FadeIn(h_cpp), FadeIn(h_asm), run_time=0.25)
+        g_call = find_line(cpp_lines, "add(x1, x2);")
+        g_push = find_line(asm_lines, "push    ebp")
+        h1 = highlight_line(g_call) if g_call else None
+        h2 = highlight_line(g_push) if g_push else None
+        if h1 and h2:
+            self.play(FadeIn(h1), FadeIn(h2), run_time=0.25)
         self.play(Flash(cells[4], color=YELLOW, flash_radius=0.24), run_time=0.30)
-        self.play(FadeOut(h_cpp), FadeOut(h_asm), run_time=0.2)
+        if h1 and h2:
+            self.play(FadeOut(h1), FadeOut(h2), run_time=0.2)
 
-        h_asm2 = highlight_line(asm_lines[1])
-        self.play(FadeIn(h_asm2), run_time=0.2)
+        g_mov_ebp = find_line(asm_lines, "mov     ebp, esp")
+        h = highlight_line(g_mov_ebp) if g_mov_ebp else None
+        if h:
+            self.play(FadeIn(h), run_time=0.2)
         self.play(move_ptr(ebp, cells[6], side="right", length=0.55), run_time=0.6)
-        self.play(FadeOut(h_asm2), run_time=0.2)
+        if h:
+            self.play(FadeOut(h), run_time=0.2)
 
-        h_asm3 = highlight_line(asm_lines[2])
-        self.play(FadeIn(h_asm3), run_time=0.2)
+        g_sub_esp = find_line(asm_lines, "sub     esp, 0x10")
+        h = highlight_line(g_sub_esp) if g_sub_esp else None
+        if h:
+            self.play(FadeIn(h), run_time=0.2)
         target_idx = 2
         self.play(move_ptr(esp, cells[target_idx], side="right", length=0.55), run_time=0.7)
         for i in range(target_idx, 6):
             self.play(Flash(cells[i], color=YELLOW, flash_radius=0.22), run_time=0.10)
-        self.play(FadeOut(h_asm3), run_time=0.2)
+        if h:
+            self.play(FadeOut(h), run_time=0.2)
 
-        h_cpp2 = highlight_line(cpp_lines[5])
-        h_asm4 = highlight_line(asm_lines[6])
-        self.play(FadeIn(h_cpp2), FadeIn(h_asm4), run_time=0.2)
-        self.play(Flash(cells[5], color=YELLOW, flash_radius=0.23), run_time=0.30)
-        self.play(FadeOut(h_cpp2), FadeOut(h_asm4), run_time=0.2)
+        g_cpp_sum = find_line(cpp_lines, "c = a + b;")
+        g_lea = find_line(asm_lines, "lea     eax")
+        h_cpp = highlight_line(g_cpp_sum) if g_cpp_sum else None
+        h_asm = highlight_line(g_lea) if g_lea else None
+        if h_cpp and h_asm:
+            self.play(FadeIn(h_cpp), FadeIn(h_asm), run_time=0.2)
+        eax_new = Text("EAX = 12", font=MONO, color=INK).scale(0.34).move_to(eax_tag.get_center())
+        self.play(Transform(eax_tag, eax_new), run_time=0.35)
+        if h_cpp and h_asm:
+            self.play(FadeOut(h_cpp), FadeOut(h_asm), run_time=0.2)
 
-        h_cpp3 = highlight_line(cpp_lines[5])
-        h_asm5 = highlight_line(asm_lines[7])
-        self.play(FadeIn(h_cpp3), FadeIn(h_asm5), run_time=0.2)
+        g_store_c = find_line(asm_lines, "mov     DWORD PTR [ebp-0x4], eax")
+        h = highlight_line(g_store_c) if g_store_c else None
+        if h:
+            self.play(FadeIn(h), run_time=0.2)
         c_val = text_in_cell(cells, 7, "12", INK)
-        self.play(
-            Transform(labels["c"], c_val),
-            Flash(cells[7], color=YELLOW, flash_radius=0.22),
-            run_time=0.55,
-        )
-        self.play(FadeOut(h_cpp3), FadeOut(h_asm5), run_time=0.2)
+        self.play(Transform(labels["c"], c_val), Flash(cells[7], color=YELLOW, flash_radius=0.22), run_time=0.55)
+        if h:
+            self.play(FadeOut(h), run_time=0.2)
+
+        g_ret_cpp = find_line(cpp_lines, "return c;")
+        g_load_eax = find_line(asm_lines, "mov     eax, DWORD PTR [ebp-0x4]")
+        h_cpp = highlight_line(g_ret_cpp) if g_ret_cpp else None
+        h_asm = highlight_line(g_load_eax) if g_load_eax else None
+        if h_cpp and h_asm:
+            self.play(FadeIn(h_cpp), FadeIn(h_asm), run_time=0.2)
+        self.play(Flash(cells[7], color=YELLOW, flash_radius=0.20), run_time=0.25)
+        if h_cpp and h_asm:
+            self.play(FadeOut(h_cpp), FadeOut(h_asm), run_time=0.2)
+
+        g_leave = find_line(asm_lines, "leave")
+        h = highlight_line(g_leave) if g_leave else None
+        if h:
+            self.play(FadeIn(h), run_time=0.2)
+        self.play(move_ptr(esp, cells[6], side="right", length=0.55), run_time=0.55)
+        self.play(move_ptr(ebp, cells[5], side="right", length=0.55), run_time=0.55)
+        if h:
+            self.play(FadeOut(h), run_time=0.2)
+
+        g_ret = find_line(asm_lines, "ret")
+        h = highlight_line(g_ret) if g_ret else None
+        if h:
+            self.play(FadeIn(h), run_time=0.2)
+        self.play(Flash(cells[4], color=YELLOW, flash_radius=0.24), run_time=0.30)
+        if h:
+            self.play(FadeOut(h), run_time=0.2)
 
         self.wait(0.8)
